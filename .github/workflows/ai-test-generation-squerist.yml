@@ -31,6 +31,13 @@ jobs:
       - name: Installeer Copilot CLI
         run: npm install -g @github/copilot
 
+      - name: TIJDELIJK - Copilot CLI rechtstreeks testen (los van actions/ai-inference)
+        run: |
+          copilot --version
+          copilot -p "Zeg alleen: test geslaagd" -s --no-ask-user
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+
       - name: Installeer Playwright
         run: |
           npm install --no-save playwright
