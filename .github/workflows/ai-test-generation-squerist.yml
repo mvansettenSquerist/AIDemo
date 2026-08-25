@@ -44,7 +44,10 @@ jobs:
         uses: actions/ai-inference@v1
         with:
           provider: copilot
-          model: gpt-4.1
+          # model bewust leeg: laat de Copilot CLI zijn eigen actuele
+          # standaardmodel kiezen. Een expliciet vastgezet model (zoals
+          # gpt-4.1) kan uitgefaseerd raken en dan een verwarrende fout
+          # geven die verwijst naar het inmiddels retired GitHub Models.
           system-prompt: |
             Je bent een senior test automation engineer. Op basis van de
             meegeleverde paginastructuur (JSON: headings, navigatielinks,
