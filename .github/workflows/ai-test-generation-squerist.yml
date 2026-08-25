@@ -31,13 +31,6 @@ jobs:
       - name: Installeer Copilot CLI
         run: npm install -g @github/copilot
 
-      - name: TIJDELIJK - Copilot CLI rechtstreeks testen (los van actions/ai-inference)
-        run: |
-          copilot --version
-          copilot -p "Zeg alleen: test geslaagd" -s --no-ask-user
-        env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
-
       - name: Installeer Playwright
         run: |
           npm install --no-save playwright
@@ -46,35 +39,29 @@ jobs:
       - name: Analyseer squerist.nl homepage
         run: node scripts/extract-page-structure.js
 
-      - name: Genereer Playwright testcases met Copilot CLI
-        id: ai
-        uses: actions/ai-inference@v1
-        with:
-          provider: copilot
-          # model bewust leeg: laat de Copilot CLI zijn eigen actuele
-          # standaardmodel kiezen. Een expliciet vastgezet model (zoals
-          # gpt-4.1) kan uitgefaseerd raken en dan een verwarrende fout
-          # geven die verwijst naar het inmiddels retired GitHub Models.
-          system-prompt: |
-            Je bent een senior test automation engineer. Op basis van de
-            meegeleverde paginastructuur (JSON: headings, navigatielinks,
-            knoppen, formulieren) genereer je zinvolle Playwright testcases
-            in TypeScript, met @playwright/test.
-            Dek in ieder geval af: aanwezigheid van kerncontent (titel,
-            belangrijkste headings), werkende navigatielinks, en eventuele
-            formuliervelden indien aanwezig.
-            Output UITSLUITEND geldige TypeScript code — geen uitleg,
-            geen markdown-codeblok-markers.
-          prompt-file: page-summary.json
-        env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+      - name: Bouw prompt voor testgeneratie
+        run: |
+          cat > prompt.txt << 'PROMPT_EOF'
+          Je bent een senior test automation engineer. Op basis van de
+          meegeleverde paginastructuur (JSON hieronder: headings, navigatielinks,
+          knoppen, formulieren) genereer je zinvolle Playwright testcases
+          in TypeScript, met @playwright/test.
+          Dek in ieder geval af: aanwezigheid van kerncontent (titel,
+          belangrijkste headings), werkende navigatielinks, en eventuele
+          formuliervelden indien aanwezig.
+          Output UITSLUITEND geldige TypeScript code — geen uitleg,
+          geen markdown-codeblok-markers, geen ```-hekjes.
 
-      - name: Schrijf gegenereerde test weg
+          Paginastructuur:
+          PROMPT_EOF
+          cat page-summary.json >> prompt.txt
+
+      - name: Genereer Playwright testcases met Copilot CLI (rechtstreeks)
         run: |
           mkdir -p tests/ai-generated
-          cat > tests/ai-generated/squerist-homepage.spec.ts << 'EOF'
-          ${{ steps.ai.outputs.response }}
-          EOF
+          copilot -p "$(cat prompt.txt)" -s --no-ask-user > tests/ai-generated/squerist-homepage.spec.ts
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
 
       - name: Toon resultaat in job summary
         run: |
@@ -94,8 +81,9 @@ jobs:
           title: "Demo: AI-gegenereerde tests voor squerist.nl homepage"
           add-paths: tests/ai-generated/squerist-homepage.spec.ts
           body: |
-            Automatisch gegenereerd door GitHub Copilot CLI (`gpt-4.1`)
-            op basis van de live structuur van squerist.nl.
+            Automatisch gegenereerd door de GitHub Copilot CLI, rechtstreeks
+            aangeroepen (zonder tussenkomst van actions/ai-inference), op basis
+            van de live structuur van squerist.nl.
 
             **Opruimen na de demo:** sluit deze PR (niet mergen). Er verandert
             niets op `main` — de volgende run maakt een nieuwe branch/PR aan.
