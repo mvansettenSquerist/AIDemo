@@ -1,0 +1,91 @@
+name: "AI Demo 2 - Testgeneratie squerist.nl"
+
+# Handmatig starten via Actions-tab > "Run workflow".
+# Resultaat: een Pull Request met AI-gegenereerde Playwright tests,
+# gebaseerd op de live structuur van de squerist.nl homepage.
+# Opruimen voor een nieuwe demo: sluit de PR (niet mergen) en/of
+# verwijder de branch — main blijft ongewijzigd.
+#
+# Vereist: repository secret COPILOT_GITHUB_TOKEN (fine-grained PAT met
+# de "Copilot Requests"-permissie). GitHub Models (de sleutelloze route)
+# is per 30 juli 2026 volledig uitgefaseerd — zie stappenplan.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Installeer Copilot CLI
+        run: npm install -g @github/copilot
+
+      - name: Installeer Playwright
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Analyseer squerist.nl homepage
+        run: node scripts/extract-page-structure.js
+
+      - name: Genereer Playwright testcases met Copilot CLI
+        id: ai
+        uses: actions/ai-inference@v1
+        with:
+          provider: copilot
+          model: gpt-4.1
+          system-prompt: |
+            Je bent een senior test automation engineer. Op basis van de
+            meegeleverde paginastructuur (JSON: headings, navigatielinks,
+            knoppen, formulieren) genereer je zinvolle Playwright testcases
+            in TypeScript, met @playwright/test.
+            Dek in ieder geval af: aanwezigheid van kerncontent (titel,
+            belangrijkste headings), werkende navigatielinks, en eventuele
+            formuliervelden indien aanwezig.
+            Output UITSLUITEND geldige TypeScript code — geen uitleg,
+            geen markdown-codeblok-markers.
+          prompt-file: page-summary.json
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+
+      - name: Schrijf gegenereerde test weg
+        run: |
+          mkdir -p tests/ai-generated
+          cat > tests/ai-generated/squerist-homepage.spec.ts << 'EOF'
+          ${{ steps.ai.outputs.response }}
+          EOF
+
+      - name: Toon resultaat in job summary
+        run: |
+          {
+            echo "## AI-gegenereerde Playwright tests voor squerist.nl"
+            echo ""
+            echo '```typescript'
+            cat tests/ai-generated/squerist-homepage.spec.ts
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open PR met gegenereerde test
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "AI-gegenereerde Playwright tests voor squerist.nl (demo)"
+          branch: ai-demo/squerist-tests-${{ github.run_number }}
+          title: "Demo: AI-gegenereerde tests voor squerist.nl homepage"
+          add-paths: tests/ai-generated/squerist-homepage.spec.ts
+          body: |
+            Automatisch gegenereerd door GitHub Copilot CLI (`gpt-4.1`)
+            op basis van de live structuur van squerist.nl.
+
+            **Opruimen na de demo:** sluit deze PR (niet mergen). Er verandert
+            niets op `main` — de volgende run maakt een nieuwe branch/PR aan.
