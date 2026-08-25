@@ -1,0 +1,65 @@
+name: "AI Demo 1 - Code review op testbestand"
+
+# Handmatig starten via Actions-tab > "Run workflow".
+# Beoordeelt een vast doelbestand (tests/review-demo/checkout-flow.spec.ts,
+# bewust matig geschreven) met de GitHub Copilot CLI, rechtstreeks
+# aangeroepen — geen actions/ai-inference, geen derde-partij AI-tool.
+# Resultaat: leesbare review in de Job Summary van de run.
+#
+# Vereist: repository secret COPILOT_GITHUB_TOKEN (fine-grained PAT met
+# de "Copilot Requests"-permissie) — zie stappenplan uit de vorige demo.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  review-test-file:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Installeer Copilot CLI
+        run: npm install -g @github/copilot
+
+      - name: Bouw reviewprompt
+        run: |
+          cat > review-prompt.txt << 'PROMPT_EOF'
+          Je bent een senior test automation engineer die een code review
+          uitvoert op een Playwright-testbestand (TypeScript). Beoordeel op:
+          - betrouwbaarheid van selectors (brosse CSS-paden, nth-child, etc.)
+          - gebruik van harde waits (waitForTimeout) versus expliciete waits
+          - kwaliteit en zinvolheid van assertions (ontbrekende, zwakke of
+            altijd-ware checks)
+          - foutafhandeling die fouten stilzwijgend negeert
+          - testnamen en leesbaarheid
+          - overige anti-patterns in testautomatisering
+
+          Geef per gevonden probleem: de regel/locatie, waarom het een
+          probleem is, en een concreet verbetervoorstel. Sluit af met een
+          korte prioritering (wat eerst oppakken).
+
+          Te reviewen bestand (tests/review-demo/checkout-flow.spec.ts):
+          PROMPT_EOF
+          cat tests/review-demo/checkout-flow.spec.ts >> review-prompt.txt
+
+      - name: Voer AI review uit met Copilot CLI (rechtstreeks)
+        run: |
+          copilot -p "$(cat review-prompt.txt)" -s --no-ask-user > review-output.md
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+
+      - name: Toon review in job summary
+        run: |
+          {
+            echo "## AI code review — tests/review-demo/checkout-flow.spec.ts"
+            echo ""
+            cat review-output.md
+          } >> "$GITHUB_STEP_SUMMARY"
